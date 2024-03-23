@@ -6,45 +6,49 @@ This module starts a web aplication via Flask
 """
 
 
-from flask import Flask
-from flask import render_template
-
+from flask import Flask, render_template
 
 app = Flask(__name__)
 
 
-@app.route("/")
-def hello_world():
-        return ("Hello HBNB!")
-
-
-@app.route("/hbnb")
+@app.route('/', strict_slashes=False)
 def hello_hbnb():
-        return ("HBNB")
+    return 'Hello HBNB!'
 
 
-@app.route("/c/<text>")
-def hello_c(text):
-        text = text.replace("_", " ")
-        return ("C {}".format(text))
+@app.route('/hbnb', strict_slashes=False)
+def hbnb():
+    return 'HBNB'
 
 
-@app.route("/python")
-@app.route("/python/")
-@app.route("/python/<text>")
-def hello_python(text="is cool"):
-        text = text.replace("_", " ")
-        return ("Python {}".format(text))
+@app.route('/c/<text>', strict_slashes=False)
+def c_text(text):
+    text = text.replace('_', ' ')
+    return 'C {}'.format(text)
 
 
-@app.route("/number/<int:n>")
-def num(n):
-        return ("{} is a number".format(n))
+@app.route('/python/', defaults={'text': 'is_cool'}, strict_slashes=False)
+@app.route('/python/<text>', strict_slashes=False)
+def python_text(text):
+    text = text.replace('_', ' ')
+    return 'Python {}'.format(text)
 
 
-@app.route("/number_template/<int:n>")
+@app.route('/number/<int:n>', strict_slashes=False)
+def number(n):
+    if isinstance(n, int):
+        return '{} is a number'.format(n)
+    else:
+        return '', 404
+
+
+@app.route('/number_template/<int:n>', strict_slashes=False)
 def number_template(n):
-        return (render_template("5-number.html", n=n))
+    if isinstance(n, int):
+        return render_template('5-number.html', n=n)
+    else:
+        return '', 404
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port="5000")
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000)
