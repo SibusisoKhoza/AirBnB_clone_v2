@@ -5,16 +5,17 @@ It starts a minimal Flask apllication.
 Run it with python3 -m 1-hbnb_route or ./1-hbnb_route
 """
 from flask import Flask
+
 app = Flask(__name__)
 
 
-@app.route('/')
-def hello_hbnb():
-    """flask hello world"""
+@app.route("/", strict_slashes=False)
+def hello():
+    """Return a given string"""
     return "Hello HBNB!"
 
 
-@app.route('/hbnb')
+@app.route('/hbnb', strict_slashes=False)
 def hbnb():
     """add a path to the url"""
     return "HBNB"
