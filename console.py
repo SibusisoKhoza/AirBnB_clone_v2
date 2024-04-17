@@ -2,8 +2,12 @@
 """ Console Module """
 import cmd
 import sys
+import re
+import os
+from datetime import datetime
+import uuid
 from models.base_model import BaseModel
-from models.__init__ import storage
+from models import storage
 from models.user import User
 from models.place import Place
 from models.state import State
@@ -94,7 +98,7 @@ class HBNBCommand(cmd.Cmd):
 
     def do_quit(self, command):
         """ Method to exit the HBNB console"""
-        exit()
+        exit(0)
 
     def help_quit(self):
         """ Prints the help documentation for quit  """
@@ -103,7 +107,7 @@ class HBNBCommand(cmd.Cmd):
     def do_EOF(self, arg):
         """ Handles EOF to exit program """
         print()
-        exit()
+        exit(0)
 
     def help_EOF(self):
         """ Prints the help documentation for EOF """
@@ -114,48 +118,63 @@ class HBNBCommand(cmd.Cmd):
         pass
 
     def do_create(self, args):
-        """ Create an object of any class with given parameters """
-        if not args:
+        """ Create an object of any class"""
+        ignored_attrs = ('id', 'created_at', 'updated_at', '__class__')
+        class_name = ''
+        name_pattern = r'(?P<name>(?:[a-zA-Z]|_)(?:[a-zA-Z]|\d|_)*)'
+        class_match = re.match(name_pattern, args)
+        obj_kwargs = {}
+        if class_match is not None:
+            class_name = class_match.group('name')
+            params_str = args[len(class_name):].strip()
+            params = params_str.split(' ')
+            str_pattern = r'(?P<t_str>"([^"]|\")*")'
+            float_pattern = r'(?P<t_float>[-+]?\d+\.\d+)'
+            int_pattern = r'(?P<t_int>[-+]?\d+)'
+            param_pattern = '{}=({}|{}|{})'.format(
+                name_pattern,
+                str_pattern,
+                float_pattern,
+                int_pattern
+            )
+            for param in params:
+                param_match = re.fullmatch(param_pattern, param)
+                if param_match is not None:
+                    key_name = param_match.group('name')
+                    str_v = param_match.group('t_str')
+                    float_v = param_match.group('t_float')
+                    int_v = param_match.group('t_int')
+                    if float_v is not None:
+                        obj_kwargs[key_name] = float(float_v)
+                    if int_v is not None:
+                        obj_kwargs[key_name] = int(int_v)
+                    if str_v is not None:
+                        obj_kwargs[key_name] = str_v[1:-1].replace('_', ' ')
+        else:
+            class_name = args
+        if not class_name:
             print("** class name missing **")
             return
-
-        # Split the input into class name and parameters
-        parts = args.split()
-        class_name = parts[0]
-        param_str = ' '.join(parts[1:])
-
-        # Check if the class name is valid
-        if class_name not in HBNBCommand.classes:
+        elif class_name not in HBNBCommand.classes:
             print("** class doesn't exist **")
             return
-
-        # Parse the parameters and create a dictionary of key-value pairs
-        params = {}
-        for param in param_str.split(','):
-            key_val = param.split('=')
-            if len(key_val) == 2:
-                key, val = key_val[0].strip(), key_val[1].strip()
-
-                # Handle string values with double quotes
-                if val.startswith('"') and val.endswith('"'):
-                    val = val[1:-1].replace('_', ' ')
-
-                # Try to convert values to int or float if possible
-                try:
-                    if '.' in val:
-                        val = float(val)
-                    else:
-                        val = int(val)
-                except ValueError:
-                    pass
-
-                params[key] = val
-
-        # Create an instance of the specified class with the given parameters
-        new_instance = HBNBCommand.classes[class_name](**params)
-        storage.save()
-        print(new_instance.id)
-        storage.save()
+        if os.getenv('HBNB_TYPE_STORAGE') == 'db':
+            if not hasattr(obj_kwargs, 'id'):
+                obj_kwargs['id'] = str(uuid.uuid4())
+            if not hasattr(obj_kwargs, 'created_at'):
+                obj_kwargs['created_at'] = str(datetime.now())
+            if not hasattr(obj_kwargs, 'updated_at'):
+                obj_kwargs['updated_at'] = str(datetime.now())
+            new_instance = HBNBCommand.classes[class_name](**obj_kwargs)
+            new_instance.save()
+            print(new_instance.id)
+        else:
+            new_instance = HBNBCommand.classes[class_name]()
+            for key, value in obj_kwargs.items():
+                if key not in ignored_attrs:
+                    setattr(new_instance, key, value)
+            new_instance.save()
+            print(new_instance.id)
 
     def help_create(self):
         """ Help information for the create method """
@@ -186,7 +205,7 @@ class HBNBCommand(cmd.Cmd):
 
         key = c_name + "." + c_id
         try:
-            print(storage._FileStorage__objects[key])
+            print(storage.all()[key])
         except KeyError:
             print("** no instance found **")
 
@@ -218,7 +237,7 @@ class HBNBCommand(cmd.Cmd):
         key = c_name + "." + c_id
 
         try:
-            del(storage.all()[key])
+            storage.delete(storage.all()[key])
             storage.save()
         except KeyError:
             print("** no instance found **")
@@ -228,32 +247,23 @@ class HBNBCommand(cmd.Cmd):
         print("Destroys an individual instance of a class")
         print("[Usage]: destroy <className> <objectId>\n")
 
-    def do_all(self, arg):
-        """
-        Prints all string representation of all instances based
-        or not on the class name
-        """
-        args = arg.split()
-        obj_list = storage.all()
+    def do_all(self, args):
+        """ Shows all objects, or all objects of a class"""
+        print_list = []
 
-        if len(args) == 0:
-            # If no arguments are provided, print all instances
-            print([str(obj) for obj in obj_list.values()])
-        else:
-            # If a class name is provided, print instances of that class
-            class_name = args[0]
-            if class_name in HBNBCommand.classes:
-                obj_instances = [obj for obj in obj_list.
-                                 values() if isinstance(obj, HBNBCommand.classes[class_name])]
-
-                if len(args) > 1:
-                    # If an ID is provided, filter by ID
-                    obj_instances = [obj for obj in obj_instances if
-                                     obj.id == args[1]]
-
-                print([str(obj) for obj in obj_instances])
-            else:
+        if args:
+            args = args.split(' ')[0]  # remove possible trailing args
+            if args not in HBNBCommand.classes:
                 print("** class doesn't exist **")
+                return
+            for k, v in storage.all().items():
+                if k.split('.')[0] == args:
+                    print_list.append(str(v))
+        else:
+            for k, v in storage.all().items():
+                print_list.append(str(v))
+
+        print(print_list)
 
     def help_all(self):
         """ Help information for the all command """
@@ -263,7 +273,7 @@ class HBNBCommand(cmd.Cmd):
     def do_count(self, args):
         """Count current number of class instances"""
         count = 0
-        for k, v in storage._FileStorage__objects.items():
+        for k, v in storage.all().items():
             if args == k.split('.')[0]:
                 count += 1
         print(count)
